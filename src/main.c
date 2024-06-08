@@ -78,7 +78,7 @@ void DrawAxes() {
 
 // random integer between two bounds, inclusive
 int randRange(int low, int high) {
-    return (rand() % (high - low)) + low;
+    return (rand() % (high + 1 - low)) + low;
 }
 
 void InitSpheres() {
@@ -90,15 +90,17 @@ void InitSpheres() {
 
     int ci = 0;
 
-    n_layers = randRange(7, 15); // printf("%d\t", n_layers);
-    layer_sizes = malloc(n_layers * sizeof(int));
+    n_layers = randRange(7, 15); // + 2 for start and end nodes
+    printf("%d\n", n_layers);
+    layer_sizes = malloc((n_layers + 2) * sizeof(int));
+    layer_sizes[0] = 1; // 1 start node
 
     for (size_t x = 0; x < n_layers; x++) {
         Color c = colors[ci++];
         if (ci > 5) ci = 0;
 
         // * both need to initialized outside of the height loop 
-        int width = randRange(1, MAX_WIDTH); // printf("%d\t", width);
+        int width = randRange(2, MAX_WIDTH); // printf("%d\t", width);
         int height = randRange(1, MAX_HEIGHT); 
         Sphere *layer = malloc(width * height * sizeof(Sphere));
         
@@ -119,14 +121,19 @@ void InitSpheres() {
 
             }
         }
-        layer_sizes[x] = width * height;
+        layer_sizes[x + 1] = width * height;  // x + 1 to offset for start node
     }
+
+    // add end node to layer_sizes and spheres
+    layer_sizes[n_layers + 1] = 1; // add it to the very end, which is one plus the number of internal layers
 
     Sphere last = spheres[n_spheres - 1];
     spheres[n_spheres++] = (Sphere) {
         (Vector3) {last.pos.x + layer_spacing * 1, 0, 0},
         BLACK, radius + 2
     };
+
+    n_layers += 2; // update size of layer_sizes
 }
 
 void DrawSpheres() {
@@ -152,19 +159,18 @@ void DrawSpheres() {
     }
 }
 
+typedef struct {
+    Sphere node;
+    Sphere* children;
+} GNode;
 void ConnectSpheres() {
     //* Connect middle layers
     int li = 0;
     int counter = 0;
     int size_next = 0;
-    int start_current_layer = 1; // index of the first sphere in the current layer
+    int start_current_layer = 0; // index of the first sphere in the current layer
     Vector3 offset = { -layer_spacing * horiz_offset, 0, 0};
-    for (int i = 1; i < n_spheres - 1; i++) { // don't get first or last spheres
-
-        // if at the end of layer_sizes, break; don't connect last layer to the end here
-        if (li + 1 >= n_layers) { 
-            break;
-        }
+    for (int i = 0; i < n_spheres - 1; i++) { 
 
         // for every ball in the current layer, connect it to every ball in the next layer
         // Next layer starts at start_current_layer + size_current_layer (layer_sizes[li])
@@ -172,7 +178,7 @@ void ConnectSpheres() {
         size_next = layer_sizes[li + 1];
         int start_next = start_current_layer + layer_sizes[li];
 
-        for (int j =  start_next; j < start_next + size_next; j++) {
+        for (int j = start_next; j < start_next + size_next; j++) {
             DrawCylinderEx(
                 Vector3Add(spheres[i].pos, offset), 
                 Vector3Add(spheres[j].pos, offset), 
@@ -187,29 +193,6 @@ void ConnectSpheres() {
             start_current_layer = i + 1;
         }
     }
-    //*-----------------------
-
-
-    //* Connect ends to middle
-    // start at one and add one to end to offset for the 0th sphere
-    for (int i = 1; i < layer_sizes[0] + 1; i++) {
-        DrawCylinderEx(
-            Vector3Add(spheres[0].pos, offset), 
-            Vector3Add(spheres[i].pos, offset), 
-            radius/5, radius/5, 20, ColorAlphaBlend(spheres[0].c, spheres[i].c, (Color) {0,0,0,0})
-        );
-    }
-    // start @ first sphere in last layer (use n_spheres - 1 to disregard final sphere)
-    // end at second to last sphere (aka last sphere that isn't the terminal node)
-    for (int i = (n_spheres - 1) - layer_sizes[n_layers - 1]; i < n_spheres - 1; i++) {
-        DrawCylinderEx(
-            Vector3Add(spheres[n_spheres - 1].pos, offset), 
-            Vector3Add(spheres[i].pos, offset), 
-            radius/5, radius/5, 20, ColorAlphaBlend(spheres[n_spheres - 1].c, spheres[i].c, (Color) {0,0,0,0})
-        );
-    }
-    //*-----------------------
-
 }
 
 void CubeSpheres() {
@@ -314,10 +297,9 @@ int main(void) {
     camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type    
 
     InitSpheres();
-    // int li = 0;
-    // int counter = 0;
+    int li = 0;
+    int counter = 0;
     // for (int i = 0; i < n_spheres - 1; i++) { // don't print first or last spheres
-
     //     vecprint(spheres[i].pos);
     //     counter += 1;
     //     if (counter >= layer_sizes[li]) {
@@ -325,11 +307,11 @@ int main(void) {
     //         counter = 0;
     //     }
     // }
-    
-    // for (int i = 0; i < sizeof(layer_sizes); i++) {
-    //     int size = layer_sizes[i];
-    //     printf("%d, ", size);
-    // }
+    printf("%d\n", n_layers);
+    for (int i = 0; i < n_layers; i++) {
+        int size = layer_sizes[i];
+        printf("%d, ", size);
+    }
 
     SetTargetFPS(60);
 
