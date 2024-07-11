@@ -171,7 +171,7 @@ void DrawSpheres() {
 
 typedef struct {
     Sphere node;
-    struct GNode* children; 
+    void* children; 
     int n_children;
 } GNode;
 GNode root;
@@ -199,7 +199,6 @@ for i in 0...n_layers:
     curr_layer = next_layer
 */
 
-
 void InitNodes() {
     root = (GNode) {
         (Sphere) {
@@ -210,49 +209,51 @@ void InitNodes() {
         0
     };
 
-    GNode** curr_layer = malloc(sizeof(GNode*));
+    GNode** curr_layer = malloc(sizeof(GNode *));
     curr_layer[0] = &root;
     int curr_size = 1;
 
-    for (int i = 0; i < n_layers; i++) {
         // make layer
-        int width = randRange(2, MAX_WIDTH);
-        int height = randRange(1, MAX_HEIGHT); 
-        GNode** next_layer = malloc(sizeof(GNode*) * width * height);
+    int width = randRange(2, MAX_WIDTH);
+    int height = randRange(1, MAX_HEIGHT); 
+    GNode** next_layer = malloc(sizeof(GNode*) * width * height);
 
-        float w_offset = ((width - 1) * spacing) / 2; 
-        float h_offset = ((height - 1) * spacing) / 2;
-        for (size_t z = 0; z < width; z++) {
-            for (size_t y = 0; y < height; y++) {
-                
-                next_layer[z * width + y] = &(GNode) {
-                    (Sphere) {
-                        (Vector3) { i * layer_spacing, y * spacing - h_offset, z * spacing - w_offset},
-                        BLACK, radius
-                    },
-                    NULL,
-                    0
-                };
-
-            }
+    float w_offset = ((width - 1) * spacing) / 2; 
+    float h_offset = ((height - 1) * spacing) / 2;
+    for (size_t z = 0; z < width; z++) {
+        for (size_t y = 0; y < height; y++) {
+            GNode* new_node = malloc(sizeof(GNode));
+            
+            *new_node = (GNode) {
+                (Sphere) {
+                    (Vector3) { layer_spacing, y * spacing - h_offset, z * spacing - w_offset},
+                    BLACK, radius
+                },
+                NULL,
+                0
+            };
+            vecprint((*new_node).node.pos);
+            next_layer[z * height + y] = new_node;
         }
-        //----------------
-
-
-        for (int j = 0; j < curr_size; j++) {
-            GNode* curr_node = curr_layer[j];
-            (*curr_node).children = malloc(sizeof(GNode*) * width * height);
-
-            for (int k = 0; k < width * height; k++) {
-                // (*curr_node).children[k] = 
-                next_layer[k];
-            }
-
-        }
-
-        curr_layer = next_layer;
-        curr_size = width * height;
     }
+    //----------------
+
+
+    for (int j = 0; j < curr_size; j++) {
+        printf("Addr: %p\n", curr_layer[j]);
+        (*curr_layer[j]).children = malloc(sizeof(GNode) * width * height);
+
+        for (int k = 0; k < width * height; k++) {
+            // de-reference curr_layer[j] to get curr_node; cast children to GNode pointer array from void*
+            vecprint((*next_layer[k]).node.pos); printf("\n");
+            ((GNode **) (*curr_layer[j]).children)[k] = next_layer[k]; 
+            (*curr_layer[j]).n_children += 1;
+        }
+
+    }
+
+    curr_layer = next_layer;
+    curr_size = width * height;
 
 }
 
@@ -289,53 +290,6 @@ void ConnectSpheres() {
     }
 }
 
-void CubeSpheres() {
-    // ! in this configuration, the y axis goes up/down while x and z come out like the ground  
-    Color colors[] = { RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE };
-    int ci = 0; 
-
-    int spacing = 4;
-    float y_spacing = 2.5;
-
-    int n_row = 3;
-    int n_col = 3;
-    int n_layers = 3;
-    int radius = 1;
-
-    float row_offset = ((n_row-1)/2) * spacing;
-    float col_offset = ((n_col-1)/2) * spacing;
-    for (float y = 0; y < n_layers; y++) {
-        for (float x = 0; x < n_row; x++) {
-            for (float z = 0; z < n_col; z++) {
-                DrawSphere(
-                    (Vector3) {
-                        x * spacing - row_offset, 
-                        y * y_spacing, 
-                        z * spacing - col_offset
-                    }, 
-                    radius, colors[ci++]
-                );
-
-                DrawSphereWires(
-                    (Vector3) {
-                        x * spacing - row_offset, 
-                        y * y_spacing, 
-                        z * spacing - col_offset
-                    }, 
-                    radius, 20, 20,
-                    BLACK
-                );
-
-                if (ci > 5) {
-                    ci = 0;
-                }
-            }
-        }
-    }
-
-}
-
-
 int main(void) {
     srand(time(NULL));
 
@@ -351,7 +305,7 @@ int main(void) {
     InitSpheres();
     int li = 0;
     int counter = 0;
-    printf("%d\n", n_layers);
+    printf("%d layers\nSizes:", n_layers);
     for (int i = 0; i < n_layers; i++) {
         int size = layer_sizes[i];
         printf("%d, ", size);
@@ -359,12 +313,12 @@ int main(void) {
 
     InitNodes(); 
     printf("\nn_children: %d\n", root.n_children);
-    GNode* children = root.children;
+    GNode** children = root.children;
     for (int i = 0; i < root.n_children; i++) {
         printf("Child %d: ", i);
-        vecprint(children[i].node.pos);
+        // children is array of GNode pointer; get pointer at index, then dereference it
+        vecprint((*children[i]).node.pos);
         printf("\n");
-        printf("n grand children: %d\n", children[i].n_children);
     }
 
     // SetTargetFPS(60);
