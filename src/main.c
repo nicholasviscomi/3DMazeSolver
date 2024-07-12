@@ -11,8 +11,8 @@
 #define MAX_WIDTH 3
 #define MAX_HEIGHT 3
 
-#define MAX_LAYERS 4
-#define MIN_LAYERS 2
+#define MAX_LAYERS 10
+#define MIN_LAYERS 5
 
 #define vadd Vector3Add
 
@@ -92,83 +92,6 @@ int randRange(int low, int high) {
     return (rand() % (high + 1 - low)) + low;
 }
 
-void InitSpheres() {
-    spheres[0] = (Sphere) {
-        (Vector3) {-1 * layer_spacing, 0, 0},
-        WHITE, radius + 2
-    };
-    n_spheres = 1;
-
-    int ci = 0;
-
-    n_layers = randRange(MIN_LAYERS, MAX_LAYERS); // + 2 for start and end nodes
-    layer_sizes = malloc((n_layers + 2) * sizeof(int));
-    layer_sizes[0] = 1; // 1 start node
-
-    for (size_t x = 0; x < n_layers; x++) {
-        Color c = colors[ci++];
-        if (ci > 5) ci = 0;
-
-        // * both need to initialized outside of the height loop 
-        int width = randRange(2, MAX_WIDTH); // printf("%d\t", width);
-        int height = randRange(1, MAX_HEIGHT); 
-        Sphere *layer = malloc(width * height * sizeof(Sphere));
-        
-        for (size_t z = 0; z < width; z++) {
-            for (size_t y = 0; y < height; y++) {
-
-                float w_offset = ((width - 1) * spacing) / 2; 
-                float h_offset = ((height - 1) * spacing) / 2;
-
-                spheres[n_spheres] = (Sphere) {
-                    (Vector3) { x * layer_spacing, y * spacing - h_offset, z * spacing - w_offset},
-                    c, radius
-                };
-                
-                // printf("(%f, %f, %f)\t", spheres[i].x, spheres[i].y, spheres[i].z);
-                n_spheres += 1;
-
-            }
-        }
-        layer_sizes[x + 1] = width * height;  // x + 1 to offset for start node
-    }
-
-    // add end node to layer_sizes and spheres
-    layer_sizes[n_layers + 1] = 1; // add it to the very end, which is one plus the number of internal layers
-
-    Sphere last = spheres[n_spheres - 1];
-    spheres[n_spheres++] = (Sphere) {
-        (Vector3) {last.pos.x + layer_spacing * 1, 0, 0},
-        BLACK, radius + 2
-    };
-
-    n_layers += 2; // update size of layer_sizes
-}
-
-void DrawSpheres() {
-    int ci = 0; 
-
-    for (int i = 0; i < n_spheres; i++) {
-        Color c;
-        if (i == 0 || i == n_spheres - 1) {
-            c = GRAY;
-        } else {
-            c = colors[ci++];
-        }
-
-        Sphere s = spheres[i];
-        s.pos.x = s.pos.x - horiz_offset*layer_spacing;
-
-        DrawSphere(s.pos, s.radius, s.c);
-        DrawSphere(s.pos, s.radius + 0.1, ColorAlpha(WHITE, 0.4));
-
-        if (ci > 5) {
-            ci = 0;
-        }
-    }
-}
-
-
 typedef struct {
     Sphere node;
     void* children; 
@@ -199,35 +122,26 @@ for i in 0...n_layers:
     curr_layer = next_layer
 */
 
-void InitNodes() {
-    root = (GNode) {
-        (Sphere) {
-            (Vector3) {-1 * layer_spacing, 0, 0},
-            WHITE, radius + 2
-        },
-        malloc(MAX_WIDTH * MAX_HEIGHT * sizeof(GNode)),
-        0
-    };
-
-    GNode** curr_layer = malloc(sizeof(GNode *));
-    curr_layer[0] = &root;
-    int curr_size = 1;
-
-        // make layer
-    int width = randRange(2, MAX_WIDTH);
-    int height = randRange(1, MAX_HEIGHT); 
+/*
+Used for making an array of GNode pointers for one layer in the maze. Width and height are 
+for the number of balls in the row or column; depth is the number of the current layer;
+these will be used to calculate the correct position so they can be easily displayed
+*/
+GNode** make_layer(size_t width, size_t height, size_t depth) {
     GNode** next_layer = malloc(sizeof(GNode*) * width * height);
 
     float w_offset = ((width - 1) * spacing) / 2; 
     float h_offset = ((height - 1) * spacing) / 2;
     for (size_t z = 0; z < width; z++) {
         for (size_t y = 0; y < height; y++) {
+            //! must malloc new space and then assign the value or else it will use the same 
+            //! memory location in multiple iterations
             GNode* new_node = malloc(sizeof(GNode));
             
             *new_node = (GNode) {
                 (Sphere) {
-                    (Vector3) { layer_spacing, y * spacing - h_offset, z * spacing - w_offset},
-                    BLACK, radius
+                    (Vector3) { depth * layer_spacing, y * spacing - h_offset, z * spacing - w_offset},
+                    colors[depth % 6], radius
                 },
                 NULL,
                 0
@@ -236,64 +150,85 @@ void InitNodes() {
             next_layer[z * height + y] = new_node;
         }
     }
-    //----------------
 
+    return next_layer;
+}
 
-    for (int j = 0; j < curr_size; j++) {
-        printf("Addr: %p\n", curr_layer[j]);
-        (*curr_layer[j]).children = malloc(sizeof(GNode) * width * height);
+void InitNodes() {
+    root = (GNode) {
+        (Sphere) {
+            (Vector3) {-1 * layer_spacing, 0, 0},
+            WHITE, radius + 2
+        },
+        NULL,
+        0
+    };
+    GNode end_node = (GNode) {
+        (Sphere) {
+            (Vector3) { n_layers * layer_spacing, 0, 0},
+            BLACK,
+            radius + 2
+        },
+        .children = NULL,
+        .n_children = 0
+    };
 
-        for (int k = 0; k < width * height; k++) {
-            // de-reference curr_layer[j] to get curr_node; cast children to GNode pointer array from void*
-            vecprint((*next_layer[k]).node.pos); printf("\n");
-            ((GNode **) (*curr_layer[j]).children)[k] = next_layer[k]; 
-            (*curr_layer[j]).n_children += 1;
+    GNode** curr_layer = malloc(sizeof(GNode *));
+    curr_layer[0] = &root;
+    int curr_size = 1;
+
+    for (size_t i = 0; i <= n_layers; i++) {
+        GNode** next_layer; int width, height;
+
+        if (i == n_layers) {
+            // if at the last layer, connect them to the final node
+            next_layer = malloc(sizeof(GNode *));
+            next_layer[0] = &end_node;
+            width = 1; height = 1;
+        } else {
+            width = randRange(2, MAX_WIDTH);
+            height = randRange(1, MAX_HEIGHT); 
+            next_layer = make_layer(width, height, i);
         }
 
+        for (int j = 0; j < curr_size; j++) {
+
+            curr_layer[j]->children = malloc(sizeof(GNode) * width * height);
+
+            //* add to spheres array for easy display of nodes 
+            spheres[n_spheres++] = curr_layer[j]->node;
+
+            for (int k = 0; k < width * height; k++) {
+                // de-reference curr_layer[j] to get curr_node; cast children to GNode pointer array from void*
+                // vecprint((*next_layer[k]).node.pos); printf("\n");
+                ((GNode **) curr_layer[j]->children)[k] = next_layer[k]; 
+                curr_layer[j]->n_children += 1;
+            }
+
+        }
+
+        curr_layer = next_layer;
+        curr_size = width * height;
     }
 
-    curr_layer = next_layer;
-    curr_size = width * height;
+    spheres[n_spheres++] = end_node.node;
 
 }
 
-void ConnectSpheres() {
-    //* Connect middle layers    
-    int li = 0;
-    int counter = 0;
-    int size_next = 0;
-    int start_current_layer = 0; // index of the first sphere in the current layer
-    Vector3 offset = { -layer_spacing * horiz_offset, 0, 0};
-    for (int i = 0; i < n_spheres - 1; i++) { 
-        // for every ball in the current layer, connect it to every ball in the next layer
-        // Next layer starts at start_current_layer + size_current_layer (layer_sizes[li])
-        
-        size_next = layer_sizes[li + 1];
-        int start_next = start_current_layer + layer_sizes[li];
-
-
-        for (int j = start_next; j < start_next + size_next; j++) {
-            DrawCylinderEx(
-                vadd(spheres[i].pos, offset), 
-                vadd(spheres[j].pos, offset), 
-                radius/5, radius/5, 20, 
-                ColorAlphaBlend(spheres[j].c, spheres[j].c, (Color) {0,0,0,50})
-            );
-        }
-
-        counter += 1;
-        if (counter >= layer_sizes[li]) {
-            li += 1;
-            counter = 0;
-            start_current_layer = i + 1;
-        }
+void DrawSpheres() {
+    Vector3 offset = (Vector3) { -layer_spacing * horiz_offset, 0, 0 };
+    for (int i = 0; i < n_spheres; i++) {
+        DrawSphere(
+            vadd(spheres[i].pos, offset), 
+            spheres[i].radius, spheres[i].c
+        );
     }
 }
 
 int main(void) {
     srand(time(NULL));
 
-    // InitWindow(WIDTH, HEIGHT, "игра");
+    InitWindow(WIDTH, HEIGHT, "игра");
 
     Camera3D camera = { 0 };
     camera.position = (Vector3){ 61.945072, 61.634838, 148.785477 };
@@ -302,89 +237,73 @@ int main(void) {
     camera.fovy = 45.0f;                                // Camera field-of-view Y
     camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type    
 
-    InitSpheres();
-    int li = 0;
-    int counter = 0;
-    printf("%d layers\nSizes:", n_layers);
-    for (int i = 0; i < n_layers; i++) {
-        int size = layer_sizes[i];
-        printf("%d, ", size);
-    }
-
+    n_layers = randRange(MIN_LAYERS, MAX_LAYERS);
+    printf("%d layers\n", n_layers);
     InitNodes(); 
-    printf("\nn_children: %d\n", root.n_children);
-    GNode** children = root.children;
-    for (int i = 0; i < root.n_children; i++) {
-        printf("Child %d: ", i);
-        // children is array of GNode pointer; get pointer at index, then dereference it
-        vecprint((*children[i]).node.pos);
-        printf("\n");
+
+    SetTargetFPS(60);
+
+    while (!WindowShouldClose()) {        
+        // RainbowRectangles();
+        
+        if (IsKeyPressed('O') || IsKeyPressedRepeat('O')) {
+            camera.position = Zoom(camera.position, 1.10);
+            vecprint(camera.position);
+        }
+        if (IsKeyPressed('I') || IsKeyPressedRepeat('I')) {
+            camera.position = Zoom(camera.position, 0.90);
+            vecprint(camera.position);
+        }
+        if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP)) {
+            Vector3 new = (Vector3) { camera.position.x, camera.position.y + 10, camera.position.z };
+            
+            camera.position = vecmul(new, veclen(camera.position)/veclen(new));
+        }
+        if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN)) {
+            Vector3 new = (Vector3) { camera.position.x, camera.position.y - 10, camera.position.z };
+
+            camera.position = vecmul(new, veclen(camera.position)/veclen(new));
+        }
+
+        // Change horizontal offset which controls how many spaces the balls get shifted
+        // along the x-axis. Create the same effect as moving the camera by moving the objects
+        // because idk how to shift the camera tbh
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT)) {
+            horiz_offset -= 1;
+        }
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT)) {
+            horiz_offset += 1;
+        }
+
+
+        float m = GetMouseWheelMove();
+        if (m > 0) {
+            Vector3 new = RotateY(camera.position, (-2 * PI / 100) * m);
+            camera.position = new;
+            // vecprint(camera.position);
+        } else if (m < 0) {
+            // ! m < 0, so use its abs to scaled the rotation according to scroll velocity
+            Vector3 new = RotateY(camera.position,  (2 * PI / 100) * fabsf(m));
+            camera.position = new;
+            // vecprint(camera.position);
+        }  
+
+        BeginDrawing();
+
+            ClearBackground(DARKGRAY);
+
+            BeginMode3D(camera);
+                // DrawAxes();
+                // CubeSpheres();
+                
+                DrawSpheres();
+
+            EndMode3D();
+
+        EndDrawing();
     }
 
-    // SetTargetFPS(60);
-
-    // while (!WindowShouldClose()) {        
-    //     // RainbowRectangles();
-        
-    //     if (IsKeyPressed('O') || IsKeyPressedRepeat('O')) {
-    //         camera.position = Zoom(camera.position, 1.10);
-    //         vecprint(camera.position);
-    //     }
-    //     if (IsKeyPressed('I') || IsKeyPressedRepeat('I')) {
-    //         camera.position = Zoom(camera.position, 0.90);
-    //         vecprint(camera.position);
-    //     }
-    //     if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP)) {
-    //         Vector3 new = (Vector3) { camera.position.x, camera.position.y + 10, camera.position.z };
-            
-    //         camera.position = vecmul(new, veclen(camera.position)/veclen(new));
-    //     }
-    //     if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN)) {
-    //         Vector3 new = (Vector3) { camera.position.x, camera.position.y - 10, camera.position.z };
-
-    //         camera.position = vecmul(new, veclen(camera.position)/veclen(new));
-    //     }
-
-    //     // Change horizontal offset which controls how many spaces the balls get shifted
-    //     // along the x-axis. Create the same effect as moving the camera by moving the objects
-    //     // because idk how to shift the camera tbh
-    //     if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT)) {
-    //         horiz_offset -= 1;
-    //     }
-    //     if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT)) {
-    //         horiz_offset += 1;
-    //     }
-
-
-    //     float m = GetMouseWheelMove();
-    //     if (m > 0) {
-    //         Vector3 new = RotateY(camera.position, (-2 * PI / 100) * m);
-    //         camera.position = new;
-    //         // vecprint(camera.position);
-    //     } else if (m < 0) {
-    //         // ! m < 0, so use its abs to scaled the rotation according to scroll velocity
-    //         Vector3 new = RotateY(camera.position,  (2 * PI / 100) * fabsf(m));
-    //         camera.position = new;
-    //         // vecprint(camera.position);
-    //     }  
-
-    //     BeginDrawing();
-
-    //         ClearBackground(DARKGRAY);
-
-    //         BeginMode3D(camera);
-    //             // DrawAxes();
-    //             // CubeSpheres();
-                
-    //             DrawSpheres();
-    //             ConnectSpheres();
-
-    //         EndMode3D();
-
-    //     EndDrawing();
-    // }
-
-    // CloseWindow();
+    CloseWindow();
 
     return 0;
 }
