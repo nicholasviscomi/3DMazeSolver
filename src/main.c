@@ -4,15 +4,19 @@
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
 
 #define ZOOM_MAX 300
 #define ZOOM_MIN 10
-#define MAX_WIDTH 3
-#define MAX_HEIGHT 3
 
-#define MAX_LAYERS 10
-#define MIN_LAYERS 5
+#define MAX_WIDTH 5
+#define MAX_HEIGHT 5
+
+#define MAX_LAYERS 2
+#define MIN_LAYERS 2
+
+#define DROPOUT 0.3
 
 #define vadd Vector3Add
 
@@ -96,8 +100,13 @@ typedef struct {
     Sphere node;
     void* children; 
     int n_children;
+    // unique id to prevent drawing the same node multiple times; 
+    // will be the index of the sphere in spheres array
+    int id; 
 } GNode;
-GNode root;
+GNode root, end_node; // must be declared out here or malloc'ed so it doesn't get destroyed!
+GNode *nodes[MAX_LAYERS * MAX_HEIGHT * MAX_WIDTH];
+int nnodes = 0;
 
 /*
 GNode* curr_layer = [root]
@@ -139,12 +148,13 @@ GNode** make_layer(size_t width, size_t height, size_t depth) {
             GNode* new_node = malloc(sizeof(GNode));
             
             *new_node = (GNode) {
-                (Sphere) {
+                .node = (Sphere) {
                     (Vector3) { depth * layer_spacing, y * spacing - h_offset, z * spacing - w_offset},
                     colors[depth % 6], radius
                 },
-                NULL,
-                0
+                .children = NULL,
+                .n_children = 0,
+                .id = 0 // will be updated in InitNodes()
             };
             vecprint((*new_node).node.pos);
             next_layer[z * height + y] = new_node;
@@ -152,6 +162,17 @@ GNode** make_layer(size_t width, size_t height, size_t depth) {
     }
 
     return next_layer;
+}
+
+void shuffle(GNode** arr, int n) {
+
+    for (int i = n - 1; i > 0; i--) {
+        int j = randRange(0, i);
+        GNode* temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+
 }
 
 void InitNodes() {
@@ -163,10 +184,11 @@ void InitNodes() {
         NULL,
         0
     };
-    GNode end_node = (GNode) {
+
+    end_node = (GNode) {
         (Sphere) {
-            (Vector3) { n_layers * layer_spacing, 0, 0},
-            BLACK,
+            (Vector3) { n_layers * layer_spacing, 0, 0 },
+            WHITE,
             radius + 2
         },
         .children = NULL,
@@ -187,7 +209,7 @@ void InitNodes() {
             width = 1; height = 1;
         } else {
             width = randRange(2, MAX_WIDTH);
-            height = randRange(1, MAX_HEIGHT); 
+            height = randRange(2, MAX_HEIGHT); 
             next_layer = make_layer(width, height, i);
         }
 
@@ -195,34 +217,70 @@ void InitNodes() {
 
             curr_layer[j]->children = malloc(sizeof(GNode) * width * height);
 
-            //* add to spheres array for easy display of nodes 
-            spheres[n_spheres++] = curr_layer[j]->node;
+            curr_layer[j]->id = nnodes;
+            //* add to array for easy display of nodes 
+            nodes[nnodes++] = curr_layer[j];
 
             for (int k = 0; k < width * height; k++) {
+                //! since some nodes are getting skipped, k is NOT the next contiguous index
+                int idx = curr_layer[j]->n_children; 
+
                 // de-reference curr_layer[j] to get curr_node; cast children to GNode pointer array from void*
-                // vecprint((*next_layer[k]).node.pos); printf("\n");
-                ((GNode **) curr_layer[j]->children)[k] = next_layer[k]; 
+                ((GNode **) curr_layer[j]->children)[idx] = next_layer[k]; 
                 curr_layer[j]->n_children += 1;
             }
 
+            shuffle((GNode**) curr_layer[j]->children, curr_layer[j]->n_children);
+
+            int n = curr_layer[j]->n_children;
+            int new_size = ((int) n * DROPOUT);
+
+            if (new_size == 0) {
+                /*
+                When connecting to the last layer, if DROPOUT < 0.5, new_size will always be 0 because
+                any number times <0.5 rounded to an integer will be 0. Therefore we need to redefine 
+                new_size to have 1/3 chance of being 1 or 0
+                */
+                new_size = randRange(1, 3) == 1 ? 0 : 1;
+            }
+            
+            if (i > 0) { // don't dropout children on root
+                curr_layer[j]->children = realloc(curr_layer[j]->children, sizeof(GNode*) * new_size);
+                curr_layer[j]->n_children = new_size;
+            }
         }
+
 
         curr_layer = next_layer;
         curr_size = width * height;
     }
 
-    spheres[n_spheres++] = end_node.node;
-
+    nodes[nnodes++] = &end_node;
 }
 
-void DrawSpheres() {
-    Vector3 offset = (Vector3) { -layer_spacing * horiz_offset, 0, 0 };
-    for (int i = 0; i < n_spheres; i++) {
-        DrawSphere(
-            vadd(spheres[i].pos, offset), 
-            spheres[i].radius, spheres[i].c
-        );
+
+void DrawNodes() {
+    Vector3 offset = (Vector3) { -layer_spacing * horiz_offset, 0, 0};
+
+
+    for (int i = 0; i < nnodes; i++) {
+        GNode* g = nodes[i];
+        DrawSphere(vadd(g->node.pos, offset), g->node.radius, g->node.c);
+
+        for (int j = 0; j < g->n_children; j++) {
+            GNode** children = g->children;
+
+            DrawCylinderEx(
+                vadd(g->node.pos, offset), 
+                vadd(children[j]->node.pos, offset), 
+                radius/5, radius/5, 20, 
+                (Color) {0,0,0,50}
+            );
+
+        }
     }
+
+
 }
 
 int main(void) {
@@ -230,18 +288,18 @@ int main(void) {
 
     InitWindow(WIDTH, HEIGHT, "игра");
 
-    Camera3D camera = { 0 };
-    camera.position = (Vector3){ 61.945072, 61.634838, 148.785477 };
-    camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };      // Camera looking at point (0, 0, 0)
-    camera.up = (Vector3) { 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
-    camera.fovy = 45.0f;                                // Camera field-of-view Y
+    Camera3D camera =   { 0 };
+    camera.position =   (Vector3) { 61.945072, 61.634838, 148.785477 };
+    camera.target =     (Vector3) { 0.0f, 0.0f, 0.0f };      // Camera looking at point (0, 0, 0)
+    camera.up =         (Vector3) { 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
+    camera.fovy =       45.0f;                                // Camera field-of-view Y
     camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type    
 
     n_layers = randRange(MIN_LAYERS, MAX_LAYERS);
     printf("%d layers\n", n_layers);
     InitNodes(); 
 
-    SetTargetFPS(60);
+    // SetTargetFPS(60);
 
     while (!WindowShouldClose()) {        
         // RainbowRectangles();
@@ -295,8 +353,9 @@ int main(void) {
             BeginMode3D(camera);
                 // DrawAxes();
                 // CubeSpheres();
+                // set to all zeros
                 
-                DrawSpheres();
+                DrawNodes();
 
             EndMode3D();
 
