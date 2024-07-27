@@ -6,8 +6,8 @@
 #include <time.h>
 #include <string.h>
 
-#define ZOOM_MAX 600
-#define ZOOM_MIN 10
+#include "ui.h"
+#include "algo.h"
 
 #define MIN_WIDTH 3
 #define MAX_WIDTH 5
@@ -18,64 +18,36 @@
 #define MIN_LAYERS 5
 #define MAX_LAYERS 7
 
-#define DROPOUT 0.3333333333
-
 #define vadd Vector3Add
 
-const int WIDTH = 1100, HEIGHT = 600;
+#define DROPOUT 0.3333333
 
 float theta = 0;
 int horiz_offset = 3;
 
-
-float veclen(Vector3 v) {
-    return sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
-}
-
-Vector3 vecmul(Vector3 v, float m) {
-    return (Vector3) { v.x * m, v.y * m, v.z * m };
-}
-
-// prints vector only
-void vecprint(Vector3 v) {
-    printf("{%f, %f, %f}", v.x, v.y, v.z);
-}
-
-// zoom the camera position in/out by a factor
-// multiply the x, y, z components by the factor
-// E.g. factor of 2 will double the distance from the camera target (aka zoom out by 100%)
-Vector3 Zoom(Vector3 v, float factor) {
-    Vector3 new_v = {
-        v.x * factor,
-        v.y * factor,
-        v.z * factor,
-    };
-
-    // if out max/min zoom limit, return OG vector (no more zooming)
-    if (veclen(new_v) > ZOOM_MAX || veclen(new_v) < ZOOM_MIN) {
-        return v;
-    }
-    
-    return new_v;
-}
-
-// update x and z vectors for a theta radian rotation around the y axis
-Vector3 RotateY(Vector3 pos, float theta) {
-    // | cos θ    0   sin θ| |x|   | x cos θ + z sin θ|   |x'|
-    // |   0      1       0| |y| = |         y        | = |y'|
-    // |−sin θ    0   cos θ| |z|   |−x sin θ + z cos θ|   |z'|
-    float new_x =  pos.x * cos(theta) + pos.z * sin(theta);
-    float new_z = -pos.x * sin(theta) + pos.z * cos(theta);
-
-    return (Vector3) { new_x, pos.y, new_z };
-}
-
+//============================
+// TYTPE DEFINITIONS
+//============================
+typedef struct {
+    float total;    // both start out as # of seconds until completion; 
+    float lifetime; // liftetime gets decremented to 0 accordingly
+} Timer;
 
 typedef struct {
     Vector3 pos;
     Color c;
     float radius;
 } Sphere;
+
+typedef struct {
+    Sphere node;
+    void* children; 
+    int n_children;
+    // unique id to prevent drawing the same node multiple times; 
+    // will be the index of the sphere in spheres array
+    int id; 
+} GNode;
+//============================
 int n_layers = 0;
 
 float spacing = 30;
@@ -95,14 +67,6 @@ int randRange(int low, int high) {
     return (rand() % (high + 1 - low)) + low;
 }
 
-typedef struct {
-    Sphere node;
-    void* children; 
-    int n_children;
-    // unique id to prevent drawing the same node multiple times; 
-    // will be the index of the sphere in spheres array
-    int id; 
-} GNode;
 GNode root, end_node; // must be declared out here or malloc'ed so it doesn't get destroyed!
 GNode** nodes;
 int nnodes = 0;
@@ -263,11 +227,12 @@ void InitNodes() {
 }
 
 
-void DrawNodes() {
+// @param n how many nodes to draw from the array of GNode* called nodes; can manipulate this 
+// parameter to animate drawing the graph; set equal to nnodes to draw all
+void DrawNodes(int n) {
     Vector3 offset = (Vector3) { -layer_spacing * horiz_offset, 0, 0};
 
-
-    for (int i = 0; i < nnodes; i++) {
+    for (int i = 0; i < n; i++) {
         GNode* g = nodes[i];
         Color c = g->node.c;
         if (g->n_children == 0 && g != &end_node) {
@@ -302,60 +267,6 @@ void DrawNodes() {
 
 }
 
-typedef struct {
-    void (*handler)(); // event handler: no params, no return
-    char* text;
-    int x, y, width, height, font_size;
-    Color bg, tcolor;
-} Button;
-
-Button NewButton(char* text, int x, int y, int font_size, void (*handler)()) {
-    return (Button) {
-        .text = text,
-        .x = x,
-        .y = y,
-        .width = MeasureText(text, font_size),
-        .height = font_size,
-        .font_size = font_size,
-        .handler = handler,
-        .bg = BLUE
-    };
-}
-
-Button CenterY(Button b, int height) {
-    Button new = b;
-    new.y = height/2 - b.height/2;
-
-    return new;
-}
-
-Button CenterX(Button b, int width) {
-    Button new = b;
-    new.x = width/2 - b.width/2;
-
-    return new;
-}
-
-Button RightX(Button b, int width) {
-    Button new = b;
-    new.x = width - b.width - 10;
-
-    return new;
-}
-
-void Invoke(Button b) {
-    b.handler();
-}
-
-Rectangle Border(Rectangle r, int padding) {
-    return (Rectangle) {
-        .x = r.x - padding,
-        .y = r.y - padding,
-        .width = r.width + padding * 2, // times 2 because it's account for padding on both sides
-        .height = r.height + padding * 2
-    };
-}
-
 void Draw(Button b) {
     Rectangle r = (Rectangle) {
         .x = b.x - 3,
@@ -368,6 +279,40 @@ void Draw(Button b) {
     DrawText(b.text, b.x, b.y, b.font_size, WHITE);
 }
 
+Camera3D camera = { 0 };
+void ResetView() {
+    camera.position = (Vector3) {-61.207848, 241.732605, 456.531769};
+    horiz_offset = 3;
+}
+
+// start or restart a timer with a specific lifetime
+void StartTimer(Timer* timer, float lifetime) {
+    if (timer != NULL)
+        timer->total = lifetime;
+        timer->lifetime = lifetime;
+}
+
+// update a timer with with delta time since last fram (GetFrameTime())
+void UpdateTimer(Timer* timer) {
+    // subtract this frame from the timer if it's not allready expired
+    if (timer != NULL && timer->lifetime > 0)
+        timer->lifetime -= GetFrameTime();
+}
+
+// check if a timer is done.
+bool TimerDone(Timer* timer) {
+    if (timer != NULL)
+        return timer->lifetime <= 0;
+
+	return false;
+}
+
+// @returns percentage completed as decimal
+float TimerPercentage(Timer* timer) {
+    return (timer->total - timer->lifetime)/timer->total;
+}
+
+Timer graph_timer = { 0 };
 void RegenerateGraph() {
     free(nodes);
     nnodes = 0;
@@ -375,28 +320,21 @@ void RegenerateGraph() {
     n_layers = randRange(MIN_LAYERS, MAX_LAYERS);
 
     InitNodes();
-}
 
-void BreadthFirstSearch() {
-    //https://www.youtube.com/watch?v=vGlvTWUctTQ (timers)
-}
-
-Camera3D camera = { 0 };
-void ResetView() {
-    camera.position = (Vector3) {-61.207848, 241.732605, 456.531769};
-    horiz_offset = 3;
+    StartTimer(&graph_timer, n_layers); // n_layers seconds to draw the graph
 }
 
 int main(void) {
+    // gcc src/*.c $(pkg-config --libs --cflags raylib) -o bin/main && ./bin/main
     srand(time(NULL));
 
     InitWindow(WIDTH, HEIGHT, "игра");
 
-    camera.position =   (Vector3) {-61.207848, 241.732605, 456.531769};
-    camera.target =     (Vector3) { 0.0f, 0.0f, 0.0f };      // Camera looking at point (0, 0, 0)
-    camera.up =         (Vector3) { 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
-    camera.fovy =       45.0f;                                // Camera field-of-view Y
-    camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type    
+    camera.position =   (Vector3) {-61.207848, 241.732605, 456.531769}; // found direction through trial
+    camera.target =     (Vector3) { 0.0f, 0.0f, 0.0f };                 // Camera looking at point (0, 0, 0)
+    camera.up =         (Vector3) { 0.0f, 1.0f, 0.0f };                 // Camera up vector (rotation towards target)
+    camera.fovy =       45.0f;                                          // Camera field-of-view Y
+    camera.projection = CAMERA_PERSPECTIVE;                             // Camera projection type    
 
     n_layers = randRange(MIN_LAYERS, MAX_LAYERS);
     nnodes = 0;
@@ -414,6 +352,7 @@ int main(void) {
 
     SetTargetFPS(60);
 
+    StartTimer(&graph_timer, 2); // draw graph first
     while (!WindowShouldClose()) {        
         // RainbowRectangles();
         
@@ -445,7 +384,7 @@ int main(void) {
         if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT)) {
             horiz_offset += 1;
         }
-
+        
 
         float m = GetMouseWheelMove();
         if (m > 0) {
@@ -463,6 +402,7 @@ int main(void) {
             RegenerateGraph();
         }
         
+        // check mouse collision with buttons
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             Vector2 pos = GetMousePosition();
             int x = pos.x, y = pos.y;
@@ -474,16 +414,23 @@ int main(void) {
             }
         }
         
+        UpdateTimer(&graph_timer);
+
         BeginDrawing();
 
             ClearBackground(DARKGRAY);
 
             BeginMode3D(camera);
-                // DrawAxes();
-                // CubeSpheres();
-                // set to all zeros
+
+
+                int n = 0;
+                if (!TimerDone(&graph_timer)) {
+                    n = (int) nnodes * TimerPercentage(&graph_timer);
+                } else {
+                    n = nnodes;
+                }
                 
-                DrawNodes();
+                DrawNodes(n);
 
             EndMode3D();
 
@@ -501,4 +448,3 @@ int main(void) {
 
     return 0;
 }
-// gcc src/main.c $(pkg-config --libs --cflags raylib) -o bin/main && ./bin/main
