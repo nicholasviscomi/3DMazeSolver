@@ -6,7 +6,6 @@
 #include <time.h>
 #include <string.h>
 
-
 #define ZOOM_MAX 600
 #define ZOOM_MIN 10
 
@@ -275,13 +274,20 @@ void DrawNodes() {
             c = ColorAlpha(BLACK, 0.15);
         }
         DrawSphere(vadd(g->node.pos, offset), g->node.radius, c);
-
+        
         for (int j = 0; j < g->n_children; j++) {
             GNode** children = g->children;
             float alpha = 0.7; double rad = 1.25;
             if (children[j]->n_children == 0 && children[j] != &end_node) {
                 alpha = 0.15;
                 rad = 1;               
+
+                DrawCylinderWiresEx(
+                    vadd(g->node.pos, offset), 
+                    vadd(children[j]->node.pos, offset), 
+                    rad, rad, 10, 
+                    ColorAlpha(BLACK, 0.2)
+                );
             }
 
             DrawCylinderEx(
@@ -294,7 +300,91 @@ void DrawNodes() {
         }
     }
 
+}
 
+typedef struct {
+    void (*handler)(); // event handler: no params, no return
+    char* text;
+    int x, y, width, height, font_size;
+    Color bg, tcolor;
+} Button;
+
+Button NewButton(char* text, int x, int y, int font_size, void (*handler)()) {
+    return (Button) {
+        .text = text,
+        .x = x,
+        .y = y,
+        .width = MeasureText(text, font_size),
+        .height = font_size,
+        .font_size = font_size,
+        .handler = handler,
+        .bg = BLUE
+    };
+}
+
+Button CenterY(Button b, int height) {
+    Button new = b;
+    new.y = height/2 - b.height/2;
+
+    return new;
+}
+
+Button CenterX(Button b, int width) {
+    Button new = b;
+    new.x = width/2 - b.width/2;
+
+    return new;
+}
+
+Button RightX(Button b, int width) {
+    Button new = b;
+    new.x = width - b.width - 10;
+
+    return new;
+}
+
+void Invoke(Button b) {
+    b.handler();
+}
+
+Rectangle Border(Rectangle r, int padding) {
+    return (Rectangle) {
+        .x = r.x - padding,
+        .y = r.y - padding,
+        .width = r.width + padding * 2, // times 2 because it's account for padding on both sides
+        .height = r.height + padding * 2
+    };
+}
+
+void Draw(Button b) {
+    Rectangle r = (Rectangle) {
+        .x = b.x - 3,
+        .y = b.y - 2,
+        .width = b.width + 7,
+        .height = b.height + 3
+    };
+    DrawRectangleRounded(Border(r, 2), 0.50, 20, BLACK);
+    DrawRectangleRounded(r, 0.50, 20, b.bg);
+    DrawText(b.text, b.x, b.y, b.font_size, WHITE);
+}
+
+void RegenerateGraph() {
+    free(nodes);
+    nnodes = 0;
+    nodes = malloc(MAX_LAYERS * MAX_HEIGHT * MAX_WIDTH * sizeof(GNode *));
+    n_layers = randRange(MIN_LAYERS, MAX_LAYERS);
+
+    InitNodes();
+}
+
+void BreadthFirstSearch() {
+    //https://www.youtube.com/watch?v=vGlvTWUctTQ (timers)
+}
+
+Camera3D camera = { 0 };
+void ResetView() {
+    camera.position = (Vector3) {-61.207848, 241.732605, 456.531769};
+    horiz_offset = 3;
 }
 
 int main(void) {
@@ -302,7 +392,6 @@ int main(void) {
 
     InitWindow(WIDTH, HEIGHT, "игра");
 
-    Camera3D camera =   { 0 };
     camera.position =   (Vector3) {-61.207848, 241.732605, 456.531769};
     camera.target =     (Vector3) { 0.0f, 0.0f, 0.0f };      // Camera looking at point (0, 0, 0)
     camera.up =         (Vector3) { 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
@@ -314,7 +403,16 @@ int main(void) {
     nodes = malloc(MAX_LAYERS * MAX_HEIGHT * MAX_WIDTH * sizeof(GNode *));
     InitNodes(); 
 
-    // SetTargetFPS(60);
+    int toolbar_height = 80;
+
+    Button buttons[] = {
+        CenterY(CenterX(NewButton("(R)egenerate", 0, 10, 20, RegenerateGraph), WIDTH), toolbar_height),
+        NewButton("Breadth First Search", 10, 10, 15, BreadthFirstSearch),
+        RightX(NewButton("ResetView", 0, 10, 15, ResetView), WIDTH)
+    };
+    int n_buttons = sizeof(buttons)/sizeof(Button);
+
+    SetTargetFPS(60);
 
     while (!WindowShouldClose()) {        
         // RainbowRectangles();
@@ -362,14 +460,20 @@ int main(void) {
         }  
 
         if (IsKeyPressed('R')) {
-            free(nodes);
-            nnodes = 0;
-            nodes = malloc(MAX_LAYERS * MAX_HEIGHT * MAX_WIDTH * sizeof(GNode *));
-            n_layers = randRange(MIN_LAYERS, MAX_LAYERS);
-
-            InitNodes();
+            RegenerateGraph();
         }
-
+        
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            Vector2 pos = GetMousePosition();
+            int x = pos.x, y = pos.y;
+            for (int i = 0; i < n_buttons; i++) {
+                Button b = buttons[i];
+                if (x > b.x && x < b.x + b.width && y > b.y && y < b.y + b.height) {
+                    Invoke(b); // call event handler on the button just pressed
+                }
+            }
+        }
+        
         BeginDrawing();
 
             ClearBackground(DARKGRAY);
@@ -382,6 +486,13 @@ int main(void) {
                 DrawNodes();
 
             EndMode3D();
+
+
+            DrawRectangle(0, 0, WIDTH, toolbar_height, LIGHTGRAY);
+
+            for (int i = 0; i < n_buttons; i++) {
+                Draw(buttons[i]);
+            }
 
         EndDrawing();
     }
