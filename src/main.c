@@ -1,53 +1,7 @@
-#include "raylib.h"
-#include "raymath.h"
-#include <stdio.h>
-#include <math.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
-
-#include "ui.h"
-#include "algo.h"
-
-#define MIN_WIDTH 3
-#define MAX_WIDTH 5
-
-#define MIN_HEIGHT 3
-#define MAX_HEIGHT 5
-
-#define MIN_LAYERS 5
-#define MAX_LAYERS 7
-
-#define vadd Vector3Add
-
-#define DROPOUT 0.3333333
+#include "main.h"
 
 float theta = 0;
 int horiz_offset = 3;
-
-//============================
-// TYTPE DEFINITIONS
-//============================
-typedef struct {
-    float total;    // both start out as # of seconds until completion; 
-    float lifetime; // liftetime gets decremented to 0 accordingly
-} Timer;
-
-typedef struct {
-    Vector3 pos;
-    Color c;
-    float radius;
-} Sphere;
-
-typedef struct {
-    Sphere node;
-    void* children; 
-    int n_children;
-    // unique id to prevent drawing the same node multiple times; 
-    // will be the index of the sphere in spheres array
-    int id; 
-} GNode;
-//============================
 int n_layers = 0;
 
 float spacing = 30;
@@ -56,19 +10,11 @@ float layer_spacing = 80;
 Color colors[] = { RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE };
 float radius = 3;
 
-
-void DrawAxes() {
-    DrawCylinderEx((Vector3) {0, 0, 0}, (Vector3) {50, 0, 0}, 0.5, 0.5, 30, GRAY);  // x-axis
-    DrawCylinderEx((Vector3) {0, 0, 0}, (Vector3) {0, 0, 50}, 0.5, 0.5, 30, BLACK); // z-axis
-}
-
 // random integer between two bounds, inclusive
 int randRange(int low, int high) {
     return (rand() % (high + 1 - low)) + low;
 }
 
-GNode root, end_node; // must be declared out here or malloc'ed so it doesn't get destroyed!
-GNode** nodes;
 int nnodes = 0;
 
 /*
@@ -117,7 +63,8 @@ GNode** make_layer(size_t width, size_t height, size_t depth) {
                 },
                 .children = NULL,
                 .n_children = 0,
-                .id = 0 // will be updated in InitNodes()
+                .id = 0, // will be updated in InitNodes()
+                .weight = randRange(2, 10)
             };
             next_layer[z * height + y] = new_node;
         }
@@ -139,12 +86,13 @@ void shuffle(GNode** arr, int n) {
 
 void InitNodes() {
     root = (GNode) {
-        (Sphere) {
+        .node = (Sphere) {
             (Vector3) {-1 * layer_spacing, 0, 0},
             WHITE, radius + 2
         },
-        NULL,
-        0
+        .children = NULL,
+        .n_children = 0,
+        .weight = 0
     };
 
     end_node = (GNode) {
@@ -154,7 +102,8 @@ void InitNodes() {
             radius + 2
         },
         .children = NULL,
-        .n_children = 0
+        .n_children = 0,
+        .weight = 1
     };
 
     GNode** curr_layer = malloc(sizeof(GNode *));
@@ -201,7 +150,7 @@ void InitNodes() {
             if (i == n_layers) { // special dropout rules for layer leading to end node
 
                 // ~40% chance of not connecting to end node
-                if (randRange(1, 10) <= 5) {
+                if (randRange(1, 10) <= 4) {
                     curr_layer[j]->children = NULL;
                     curr_layer[j]->n_children = 0;
                 }
@@ -321,7 +270,7 @@ void RegenerateGraph() {
 
     InitNodes();
 
-    StartTimer(&graph_timer, n_layers); // n_layers seconds to draw the graph
+    StartTimer(&graph_timer, 1); // n_layers seconds to draw the graph
 }
 
 int main(void) {
@@ -346,13 +295,13 @@ int main(void) {
     Button buttons[] = {
         CenterY(CenterX(NewButton("(R)egenerate", 0, 10, 20, RegenerateGraph), WIDTH), toolbar_height),
         NewButton("Breadth First Search", 10, 10, 15, BreadthFirstSearch),
-        RightX(NewButton("ResetView", 0, 10, 15, ResetView), WIDTH)
+        RightX(NewButton("Reset (V)iew", 0, 10, 15, ResetView), WIDTH)
     };
     int n_buttons = sizeof(buttons)/sizeof(Button);
 
     SetTargetFPS(60);
 
-    StartTimer(&graph_timer, 2); // draw graph first
+    StartTimer(&graph_timer, 1); // draw graph first
     while (!WindowShouldClose()) {        
         // RainbowRectangles();
         
@@ -401,6 +350,10 @@ int main(void) {
         if (IsKeyPressed('R')) {
             RegenerateGraph();
         }
+
+        if (IsKeyPressed('V')) {
+            ResetView();
+        }
         
         // check mouse collision with buttons
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -440,6 +393,8 @@ int main(void) {
             for (int i = 0; i < n_buttons; i++) {
                 Draw(buttons[i]);
             }
+
+            DrawFPS(10, 50);
 
         EndDrawing();
     }
