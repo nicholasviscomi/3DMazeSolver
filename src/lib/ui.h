@@ -1,10 +1,8 @@
 #ifndef UI_H
 #define UI_H
 
-#include "ui.h"
-#include <stdio.h>
 #include "raylib.h"
-#include "math.h"
+#include "struct.h"
 
 #define ZOOM_MAX 600
 #define ZOOM_MIN 10
@@ -26,13 +24,6 @@ Vector3 Zoom(Vector3 v, float factor);
 
 // update x and z vectors for a theta radian rotation around the y axis
 Vector3 RotateY(Vector3 pos, float theta);
-
-typedef struct {
-    void (*handler)(); // event handler: no params, no return
-    char* text;
-    int x, y, width, height, font_size;
-    Color bg, tcolor;
-} Button;
 
 Button NewButton(char* text, int x, int y, int font_size, void (*handler)());
 

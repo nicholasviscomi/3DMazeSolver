@@ -1,18 +1,8 @@
-#include "algo.h"
-#include "main.h"
+#include "lib/struct.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-void PrintQ(Queue q) {
-    printf("------------------------------\n");
-    Node *curr = q.head;
-    while (curr != NULL) {
-        printf("%d ——> ", curr->val);
-        curr = curr->next;
-    }
-    printf("END");
-    printf("\n------------------------------\n");
-}
+void PrintQ(Queue q) {}
 
 Queue NewQueue() {
     Queue q;// = malloc(sizeof(Queue));
@@ -24,7 +14,7 @@ Queue NewQueue() {
     return q;
 }
 
-void Enqueue(Queue *q, int val) {
+void Enqueue(Queue *q, GNode *val) {
     Node* n = malloc(sizeof(Node *));
     *n = (Node) {
         .next = NULL,
@@ -62,47 +52,27 @@ Node* Dequeue(Queue *q) {
     return res;
 }
 
+/*
+Track paths:
+GNode *paths[nnodes]:
+    - initialize to NULL
+    - indexed by GNode.id
+    - each entry is the previous node in the path to the current node 
+        - "current node" meaning the node with id == index; find this node in nodes array in main.c
 
+    - to trace path:
+        - go to paths[len(paths) - 1], the end node 
+        - this points to the previous node in the path; say it has id 50
+        - go to paths[50], find id of previous node, use that index
+        - continue until id == 0 (meaning the root node was found)
+------------------
 
-// given a starting node, add all children to end of linked list
-void AddChildren() {
-    
+Track visited nodes:
+    - Node is visited if paths[i] != NULL
+-------------------
+*/
+void BreadthFirstSearch(GNode *head, int nnodes) {
+    Queue search = NewQueue();
+    GNode *paths[nnodes];
+
 }
-
-void BreadthFirstSearch() {
-    Queue q = NewQueue();
-
-}
-
-int main(int argc, char const *argv[])
-{
-    Queue q = NewQueue();
-
-    Enqueue(&q, 1);
-    Enqueue(&q, 2);
-    Enqueue(&q, 3);
-    Enqueue(&q, 4);
-    Enqueue(&q, 5);
-
-    PrintQ(q);
-
-    Dequeue(&q);
-    PrintQ(q);
-
-    Dequeue(&q);
-    Dequeue(&q);
-    Dequeue(&q);
-    Dequeue(&q);
-    Dequeue(&q);
-    Dequeue(&q);
-    Dequeue(&q);
-    Dequeue(&q);
-    PrintQ(q);
-
-    Enqueue(&q, 2);
-    PrintQ(q);
-    
-    return 0;
-}
-
-

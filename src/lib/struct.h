@@ -1,29 +1,7 @@
-#ifndef MAIN
-#define MAIN
+#ifndef STRUCT_C
+#define STRUCT_C
 
 #include "raylib.h"
-#include "raymath.h"
-#include <stdio.h>
-#include <math.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
-
-#include "ui.h"
-#include "algo.h"
-
-#define MIN_WIDTH 3
-#define MAX_WIDTH 5
-
-#define MIN_HEIGHT 3
-#define MAX_HEIGHT 5
-
-#define MIN_LAYERS 5
-#define MAX_LAYERS 7
-
-#define vadd Vector3Add
-
-#define DROPOUT 0.3333333
 
 //============================
 // TYTPE DEFINITIONS
@@ -39,7 +17,7 @@ typedef struct {
     float radius;
 } Sphere;
 
-typedef struct {
+typedef struct GNode {
     Sphere node;
     void* children; 
     int n_children;
@@ -50,8 +28,21 @@ typedef struct {
 } GNode;
 //============================
 
-// Declared here so it can be accessed by algo.c 
-GNode root, end_node; // must be declared out here or malloc'ed so it doesn't get destroyed!
-GNode** nodes;
+typedef struct Node {
+    GNode *val;
+    struct Node* next;
+} Node;
+
+typedef struct {
+    Node *head, *tail;
+    int size;
+} Queue;
+
+typedef struct {
+    void (*handler)(); // event handler: no params, no return
+    char* text;
+    int x, y, width, height, font_size;
+    Color bg, tcolor;
+} Button;
 
 #endif

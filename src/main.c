@@ -1,4 +1,29 @@
-#include "main.h"
+#include "raylib.h"
+#include "raymath.h"
+#include <stdio.h>
+#include <math.h>
+#include <stdlib.h>
+#include <time.h>
+#include <string.h>
+
+#include "lib/ui.h"
+#include "lib/algo.h"
+
+#define MIN_WIDTH 3
+#define MAX_WIDTH 5
+
+#define MIN_HEIGHT 3
+#define MAX_HEIGHT 5
+
+#define MIN_LAYERS 5
+#define MAX_LAYERS 7
+
+#define vadd Vector3Add
+
+#define DROPOUT 0.3333333
+
+GNode root, end_node; // must be declared out here or malloc'ed so it doesn't get destroyed!
+GNode** nodes;
 
 float theta = 0;
 int horiz_offset = 3;
@@ -273,6 +298,10 @@ void RegenerateGraph() {
     StartTimer(&graph_timer, 1); // n_layers seconds to draw the graph
 }
 
+void BFS_wrapper() {
+    BreadthFirstSearch(&root, nnodes);
+}
+
 int main(void) {
     // gcc src/*.c $(pkg-config --libs --cflags raylib) -o bin/main && ./bin/main
     srand(time(NULL));
@@ -294,7 +323,7 @@ int main(void) {
 
     Button buttons[] = {
         CenterY(CenterX(NewButton("(R)egenerate", 0, 10, 20, RegenerateGraph), WIDTH), toolbar_height),
-        NewButton("Breadth First Search", 10, 10, 15, BreadthFirstSearch),
+        NewButton("Breadth First Search", 10, 10, 15, BFS_wrapper),
         RightX(NewButton("Reset (V)iew", 0, 10, 15, ResetView), WIDTH)
     };
     int n_buttons = sizeof(buttons)/sizeof(Button);

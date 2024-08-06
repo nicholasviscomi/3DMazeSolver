@@ -1,4 +1,6 @@
-#include "ui.h" // NOTE: contains the include for stdio, raylib, etc. and guards multiple include
+#include "lib/ui.h" // NOTE: contains the include for stdio, raylib, etc. and guards multiple include
+#include "math.h"
+#include <stdio.h>
 
 float veclen(Vector3 v) {
     return sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
