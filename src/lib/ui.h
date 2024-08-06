@@ -25,7 +25,7 @@ Vector3 Zoom(Vector3 v, float factor);
 // update x and z vectors for a theta radian rotation around the y axis
 Vector3 RotateY(Vector3 pos, float theta);
 
-Button NewButton(char* text, int x, int y, int font_size, void (*handler)());
+Button NewButton(char* text, int x, int y, int font_size, void (*handler)(), char key);
 
 Button CenterY(Button b, int height);
 

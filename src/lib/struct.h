@@ -43,6 +43,7 @@ typedef struct {
     char* text;
     int x, y, width, height, font_size;
     Color bg, tcolor;
+    char key; // letter to press on keyboard to call handler (0 for none)
 } Button;
 
 #endif

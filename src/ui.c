@@ -44,7 +44,7 @@ Vector3 RotateY(Vector3 pos, float theta) {
     return (Vector3) { new_x, pos.y, new_z };
 }
 
-Button NewButton(char* text, int x, int y, int font_size, void (*handler)()) {
+Button NewButton(char* text, int x, int y, int font_size, void (*handler)(), char key) {
     return (Button) {
         .text = text,
         .x = x,
@@ -53,7 +53,8 @@ Button NewButton(char* text, int x, int y, int font_size, void (*handler)()) {
         .height = font_size,
         .font_size = font_size,
         .handler = handler,
-        .bg = BLUE
+        .bg = BLUE,
+        .key = key
     };
 }
 

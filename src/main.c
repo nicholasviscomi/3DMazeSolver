@@ -322,9 +322,9 @@ int main(void) {
     int toolbar_height = 80;
 
     Button buttons[] = {
-        CenterY(CenterX(NewButton("(R)egenerate", 0, 10, 20, RegenerateGraph), WIDTH), toolbar_height),
-        NewButton("Breadth First Search", 10, 10, 15, BFS_wrapper),
-        RightX(NewButton("Reset (V)iew", 0, 10, 15, ResetView), WIDTH)
+        CenterY(CenterX(NewButton("(R)egenerate", 0, 10, 20, RegenerateGraph, 'R'), WIDTH), toolbar_height),
+        NewButton("(B)readth First Search", 10, 10, 15, BFS_wrapper, 'B'),
+        RightX(NewButton("Reset (V)iew", 0, 10, 15, ResetView, 'V'), WIDTH)
     };
     int n_buttons = sizeof(buttons)/sizeof(Button);
 
@@ -375,15 +375,14 @@ int main(void) {
             camera.position = new;
             // vecprint(camera.position);
         }  
-
-        if (IsKeyPressed('R')) {
-            RegenerateGraph();
-        }
-
-        if (IsKeyPressed('V')) {
-            ResetView();
-        }
         
+        for (int i = 0; i < n_buttons; i++) {
+            Button b = buttons[i];
+            if (IsKeyPressed(b.key)) {
+                Invoke(b); // call event handler on the button just pressed
+            }
+        }
+
         // check mouse collision with buttons
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             Vector2 pos = GetMousePosition();
